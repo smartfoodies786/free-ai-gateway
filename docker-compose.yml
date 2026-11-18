@@ -1,0 +1,55 @@
+# Free AI Gateway — FreeLLMAPI + OmniRoute, one Docker Compose stack.
+# Both gateways run localhost-only (127.0.0.1). Never publish these ports
+# to the internet: anyone who can reach them can spend your free quotas.
+#
+# Upstream sources (checked 2026-11-18):
+# - FreeLLMAPI: tashfeenahmed/freellmapi, image
+#   ghcr.io/tashfeenahmed/freellmapi:latest, port 3001, health /api/ping
+# - OmniRoute: cheaper-inference/OmniRoute, image
+#   diegosouzapw/omniroute:latest, port 20128.
+#   Coding agents need OMNIROUTE_MEMORY_MB=8192 and ~10 GB container RAM
+#   (upstream Docker guide). Light chat works with the image default 1024.
+#
+# Start both:   docker compose up -d
+# Start one:    docker compose up -d omniroute
+#               docker compose up -d freellmapi
+# Stop:         docker compose down
+
+services:
+  freellmapi:
+    image: ghcr.io/tashfeenahmed/freellmapi:latest
+    container_name: freellmapi
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - freellmapi-data:/app/server/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/ping').then((res) => { if (!res.ok) process.exit(1); }).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  omniroute:
+    image: diegosouzapw/omniroute:latest
+    container_name: omniroute
+    environment:
+      OMNIROUTE_MEMORY_MB: ${OMNIROUTE_MEMORY_MB:-8192}
+    ports:
+      - "127.0.0.1:20128:20128"
+    volumes:
+      - omniroute-data:/app/data
+    restart: unless-stopped
+    stop_grace_period: 40s
+
+volumes:
+  freellmapi-data:
+  omniroute-data:
